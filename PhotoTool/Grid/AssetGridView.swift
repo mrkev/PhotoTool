@@ -3,17 +3,13 @@ import Photos
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// Marks a dragged item as coming from the grid, so sidebar albums can accept
-/// it. Finder ignores this and uses the file promise on the same item.
+/// Gives grid drags a plain-text type, which the grid and sidebar albums
+/// register for. Finder ignores it and uses the file promise on the same item.
+/// Drop targets don't read the text back, because SwiftUI can't load it from a
+/// file promise item. They use `BrowserModel.draggedAssetIDs` instead.
 nonisolated enum AssetDragPayload {
-    private static let prefix = "phototool-asset:"
-
-    static func encode(id: String) -> String {
-        prefix + id
-    }
-
-    static func decode(_ strings: [String]) -> [String] {
-        strings.filter { $0.hasPrefix(prefix) }.map { String($0.dropFirst(prefix.count)) }
+    static func text(id: String) -> String {
+        "phototool-asset:" + id
     }
 }
 
@@ -42,6 +38,7 @@ struct AssetGridView: NSViewRepresentable {
 final class AssetCollectionView: NSCollectionView {
     var onOpen: ((Int) -> Void)?
     var onMove: ((_ delta: Int, _ extend: Bool) -> Void)?
+    var onExtendSelection: ((Int) -> Void)?
     var onSelectionChanged: (() -> Void)?
     var onToggleFavorite: (() -> Void)?
     var onRemoveFromAlbum: (() -> Void)?
@@ -49,9 +46,17 @@ final class AssetCollectionView: NSCollectionView {
     var columns: () -> Int = { 1 }
 
     override func mouseDown(with event: NSEvent) {
+        let point = convert(event.locationInWindow, from: nil)
+        // NSCollectionView treats Shift-click like Command-click. Photos and
+        // Finder select the range from the last clicked item instead.
+        if event.modifierFlags.intersection([.shift, .command]) == .shift,
+           let indexPath = indexPathForItem(at: point),
+           let onExtendSelection {
+            onExtendSelection(indexPath.item)
+            return
+        }
         super.mouseDown(with: event)
         guard event.clickCount == 2 else { return }
-        let point = convert(event.locationInWindow, from: nil)
         if let indexPath = indexPathForItem(at: point) {
             onOpen?(indexPath.item)
         }
@@ -108,7 +113,7 @@ final class AssetDragItem: NSFilePromiseProvider {
 
     override func pasteboardPropertyList(forType type: NSPasteboard.PasteboardType) -> Any? {
         if type == .string, let asset = userInfo as? PHAsset {
-            return AssetDragPayload.encode(id: asset.localIdentifier)
+            return AssetDragPayload.text(id: asset.localIdentifier)
         }
         return super.pasteboardPropertyList(forType: type)
     }
@@ -180,7 +185,8 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         collectionView.allowsMultipleSelection = true
         collectionView.allowsEmptySelection = true
         collectionView.backgroundColors = [.clear]
-        collectionView.registerForDraggedTypes([.fileURL])
+        // `.string` matches the grid's own drags, so it can reorder albums.
+        collectionView.registerForDraggedTypes([.fileURL, .string])
         collectionView.setDraggingSourceOperationMask([.copy], forLocal: false)
         collectionView.setDraggingSourceOperationMask([.copy, .move], forLocal: true)
         collectionView.setAccessibilityLabel("Photos")
@@ -188,6 +194,7 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         collectionView.columns = { [weak layout] in layout?.metrics.columns ?? 1 }
         collectionView.onOpen = { [weak browser] in browser?.openViewer(at: $0) }
         collectionView.onMove = { [weak self] delta, extend in self?.moveFocus(by: delta, extend: extend) }
+        collectionView.onExtendSelection = { [weak self] in self?.extendSelection(to: $0) }
         collectionView.onSelectionChanged = { [weak self] in self?.syncSelection() }
         collectionView.onToggleFavorite = { [weak browser] in
             if browser?.hasTargets == true { browser?.toggleFavorite() }
@@ -332,15 +339,24 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         let current = focusIndex ?? (delta > 0 ? browser.selection.last : browser.selection.first)
         guard let next = layout.metrics.index(from: current, delta: delta) else { return }
         if extend, let anchor = anchorIndex ?? current {
-            anchorIndex = anchor
-            let range = min(anchor, next)...max(anchor, next)
-            collectionView.selectionIndexPaths = Set(range.map { IndexPath(item: $0, section: 0) })
+            selectRange(from: anchor, to: next)
         } else {
-            anchorIndex = next
-            collectionView.selectionIndexPaths = [IndexPath(item: next, section: 0)]
+            selectRange(from: next, to: next)
         }
-        focusIndex = next
         collectionView.scrollToItems(at: [IndexPath(item: next, section: 0)], scrollPosition: .nearestHorizontalEdge)
+    }
+
+    private func extendSelection(to index: Int) {
+        selectRange(from: anchorIndex ?? index, to: index)
+    }
+
+    /// Setting the selection in code doesn't call the delegate, so the anchor
+    /// stays put across repeated Shift-clicks and Shift-arrows.
+    private func selectRange(from anchor: Int, to index: Int) {
+        anchorIndex = anchor
+        focusIndex = index
+        let range = min(anchor, index)...max(anchor, index)
+        collectionView.selectionIndexPaths = Set(range.map { IndexPath(item: $0, section: 0) })
         syncSelection()
     }
 
@@ -401,6 +417,24 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         let item = AssetDragItem(fileType: fileType, delegate: promiseDelegate)
         item.userInfo = asset
         return item
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        willBeginAt screenPoint: NSPoint,
+        forItemsAt indexPaths: Set<IndexPath>
+    ) {
+        browser.draggedAssetIDs = assets(at: indexPaths.sorted()).map(\.localIdentifier)
+    }
+
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        draggingSession session: NSDraggingSession,
+        endedAt screenPoint: NSPoint,
+        dragOperation operation: NSDragOperation
+    ) {
+        browser.draggedAssetIDs = nil
     }
 
     // MARK: Dropping in

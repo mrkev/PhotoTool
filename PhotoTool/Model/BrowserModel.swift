@@ -76,6 +76,8 @@ final class BrowserModel {
     var showInspector = true
     var activeSheet: ActiveSheet?
     var alert: AlertInfo?
+    /// Set while the Hide confirmation is showing.
+    var assetsToHide: [PHAsset]?
     var activity: Activity?
 
     var thumbnailSize: Double {
@@ -88,6 +90,9 @@ final class BrowserModel {
     static let thumbnailRange = 80.0...480.0
 
     @ObservationIgnored weak var grid: (any AssetGridControlling)?
+    /// The photos being dragged out of the grid, set only while that drag is
+    /// in progress. Sidebar albums read this instead of the pasteboard.
+    @ObservationIgnored var draggedAssetIDs: [String]?
     @ObservationIgnored private var observer: PhotoLibraryObserver?
     @ObservationIgnored private var isChangingSource = false
     /// Where to return when leaving search results or a burst.
@@ -163,8 +168,7 @@ final class BrowserModel {
             ).firstObject else {
                 return PHAsset.fetchAssets(withLocalIdentifiers: [], options: nil)
             }
-            let includeHidden = collection.assetCollectionSubtype == .smartAlbumAllHidden
-            return PHAsset.fetchAssets(in: collection, options: query.fetchOptions(includeHidden: includeHidden))
+            return PHAsset.fetchAssets(in: collection, options: query.fetchOptions())
         case .burst(let id):
             return PHAsset.fetchAssets(withBurstIdentifier: id, options: query.fetchOptions(includeAllBursts: true))
         case .search(_, let ids):
@@ -311,10 +315,17 @@ final class BrowserModel {
         perform { try await LibraryActions.setFavorite(assets, newValue) }
     }
 
-    func toggleHidden() {
+    /// Asks before hiding, because hiding can't be undone here. PhotoKit
+    /// doesn't return hidden items (at least while Photos locks the Hidden
+    /// album), so they disappear from PhotoTool and only Photos can unhide them.
+    func confirmHideTargets() {
         let assets = targetAssets
-        let newValue = !assets.allSatisfy(\.isHidden)
-        perform { try await LibraryActions.setHidden(assets, newValue) }
+        guard !assets.isEmpty else { return }
+        assetsToHide = assets
+    }
+
+    func hide(_ assets: [PHAsset]) {
+        perform { try await LibraryActions.hide(assets) }
     }
 
     func deleteTargets() {

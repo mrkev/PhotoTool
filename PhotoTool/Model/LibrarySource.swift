@@ -96,11 +96,10 @@ nonisolated struct AssetQuery: Equatable {
         return [NSSortDescriptor(key: key, ascending: ascending)]
     }
 
-    func fetchOptions(includeHidden: Bool = false, includeAllBursts: Bool = false) -> PHFetchOptions {
+    func fetchOptions(includeAllBursts: Bool = false) -> PHFetchOptions {
         let options = PHFetchOptions()
         options.predicate = predicate
         options.sortDescriptors = sortDescriptors
-        options.includeHiddenAssets = includeHidden
         options.includeAllBurstAssets = includeAllBursts
         return options
     }

@@ -24,10 +24,11 @@ nonisolated enum LibraryActions {
         }
     }
 
-    static func setHidden(_ assets: [PHAsset], _ isHidden: Bool) async throws {
+    /// There's no unhide: PhotoKit doesn't return hidden assets to unhide.
+    static func hide(_ assets: [PHAsset]) async throws {
         try await PHPhotoLibrary.shared().performChanges {
             for asset in assets {
-                PHAssetChangeRequest(for: asset).isHidden = isHidden
+                PHAssetChangeRequest(for: asset).isHidden = true
             }
         }
     }

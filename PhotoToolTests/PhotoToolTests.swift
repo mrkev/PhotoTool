@@ -347,13 +347,3 @@ struct PhotosResultParsingTests {
     }
 }
 
-struct AssetDragPayloadTests {
-    @Test func roundTrips() {
-        let encoded = AssetDragPayload.encode(id: "ABC/L0/001")
-        #expect(AssetDragPayload.decode([encoded]) == ["ABC/L0/001"])
-    }
-
-    @Test func ignoresOtherText() {
-        #expect(AssetDragPayload.decode(["some dragged text"]).isEmpty)
-    }
-}

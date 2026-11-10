@@ -89,7 +89,9 @@ nonisolated enum SidebarBuilder {
     ]
 
     private static let utilitySubtypes: [PHAssetCollectionSubtype] = [
-        .smartAlbumAllHidden, .smartAlbumUnableToUpload,
+        // No Hidden album: PhotoKit returns nothing for it, at least while
+        // Photos locks it, which is the default.
+        .smartAlbumUnableToUpload,
     ]
 
     @concurrent
@@ -154,14 +156,12 @@ nonisolated enum SidebarBuilder {
         kind: CollectionNode.Kind,
         parentID: String?
     ) -> CollectionNode {
-        let options = PHFetchOptions()
-        options.includeHiddenAssets = collection.assetCollectionSubtype == .smartAlbumAllHidden
-        return CollectionNode(
+        CollectionNode(
             id: collection.localIdentifier,
             title: collection.localizedTitle ?? "Untitled Album",
             symbol: symbol(for: collection, kind: kind),
             kind: kind,
-            count: PHAsset.fetchAssets(in: collection, options: options).count,
+            count: PHAsset.fetchAssets(in: collection, options: nil).count,
             parentID: parentID,
             children: nil,
             canAddContent: collection.canPerform(.addContent),
@@ -192,7 +192,6 @@ nonisolated enum SidebarBuilder {
         case .smartAlbumAnimated: return "square.stack.3d.forward.dottedline"
         case .smartAlbumLongExposures: return "camera.aperture"
         case .smartAlbumRAW: return "r.square"
-        case .smartAlbumAllHidden: return "eye.slash"
         case .smartAlbumUnableToUpload: return "exclamationmark.icloud"
         case .albumImported: return "square.and.arrow.down"
         default: return kind == .smartAlbum ? "gearshape" : "rectangle.stack"

@@ -9,7 +9,6 @@ final class AssetCellView: NSView {
     private let badges = NSStackView()
     private let durationLabel = NSTextField(labelWithString: "")
     private let favoriteBadge = AssetCellView.makeBadge("heart.fill")
-    private let hiddenBadge = AssetCellView.makeBadge("eye.slash.fill")
     private let liveBadge = AssetCellView.makeBadge("livephoto")
     private let burstBadge = AssetCellView.makeBadge("square.stack.3d.down.right.fill")
     private let videoBadge = AssetCellView.makeBadge("video.fill")
@@ -43,7 +42,7 @@ final class AssetCellView: NSView {
         badges.orientation = .horizontal
         badges.spacing = 4
         badges.translatesAutoresizingMaskIntoConstraints = false
-        [favoriteBadge, hiddenBadge, liveBadge, burstBadge, videoBadge, durationLabel].forEach(badges.addArrangedSubview)
+        [favoriteBadge, liveBadge, burstBadge, videoBadge, durationLabel].forEach(badges.addArrangedSubview)
         addSubview(badges)
         NSLayoutConstraint.activate([
             badges.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
@@ -107,7 +106,6 @@ final class AssetCellView: NSView {
 
     func setBadges(for asset: PHAsset) {
         favoriteBadge.isHidden = !asset.isFavorite
-        hiddenBadge.isHidden = !asset.isHidden
         liveBadge.isHidden = !asset.mediaSubtypes.contains(.photoLive)
         burstBadge.isHidden = !asset.representsBurst
         let isVideo = asset.mediaType == .video
@@ -122,7 +120,6 @@ final class AssetCellView: NSView {
             parts.append(date.formatted(date: .abbreviated, time: .shortened))
         }
         if asset.isFavorite { parts.append("Favorite") }
-        if asset.isHidden { parts.append("Hidden") }
         assetDescription = parts.joined(separator: ", ")
     }
 

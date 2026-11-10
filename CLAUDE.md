@@ -57,9 +57,11 @@ Editor diagnostics like `Cannot find type 'BrowserModel' in scope` or `No such m
 - **All `NSAppleScript` use in the app stays on `PhotosAppBridge`'s serial queue**, for the same reason. Tests that execute scripts must be `.serialized`.
 - **Caller-supplied text in scripts must go through `PhotosScript.literal`** so it can't alter the script.
 - **Don't add menu shortcuts without a modifier.** They can fire while the user types in a text field. `.` (favorite) and Delete (remove from album) are handled in the grid's `keyDown` and the viewer's `onKeyPress` instead.
+- **PhotoKit never returns hidden assets here**, even with `includeHiddenAssets` or a fetch of the Hidden album (likely because Photos locks that album, which is the default). So Hide is one-way and asks first, there's no Unhide, and the sidebar has no Hidden album.
+- **Grid drag destinations don't read the pasteboard.** Each grid drag item is a file promise plus a `.string`, and SwiftUI can't load that string back. The grid and sidebar albums register for `.string` only to match the drag, then read `BrowserModel.draggedAssetIDs`, which is set while a grid drag is in progress.
 - **Fetch predicates and sort descriptors can only use keys PhotoKit supports**, which is why `AssetQuery` offers a limited set. An album can only be reordered while showing its unfiltered manual order (`canReorderCurrentAlbum`).
 - **Get approval before running anything that changes the real library.** The system library is the only one PhotoKit can see, and it's the user's actual photos.
 
 ## Current status
 
-Library features have not yet been run against a real photo library. Unit tests cover only pure logic. Check these first: grid batch updates, all dragging (to albums, to Finder, and reordering), moving albums between folders, Live Photo import pairing, and the assumption that Photos and PhotoKit IDs match.
+Tested against a real library of about 11,000 items, with changes limited to a throwaway album and test photos. Browsing, sorting, filtering, album and folder management, import, export, grid batch updates, the Photos.app bridge (including matching IDs), and mouse, keyboard, and drag interaction (to albums, within an album, and to Finder) all work. Not yet tested by hand: Live Photo and video playback in the viewer, importing a real Live Photo pair, the Import panel, Show in Photos, and the delete flow.

@@ -67,6 +67,25 @@ private struct BrowserDetail: View {
                     .padding()
             }
         }
+        // Here rather than beside BrowserView's alert, so the two don't share a view.
+        .alert(
+            hideTitle,
+            isPresented: Binding(
+                get: { browser.assetsToHide != nil },
+                set: { if !$0 { browser.assetsToHide = nil } }
+            ),
+            presenting: browser.assetsToHide
+        ) { assets in
+            Button("Hide") { browser.hide(assets) }
+            Button("Cancel", role: .cancel) {}
+        } message: { _ in
+            Text("Hidden items don't appear in PhotoTool, so you can't unhide them here. To see or unhide them, use the Hidden album in Photos.")
+        }
+    }
+
+    private var hideTitle: String {
+        let count = browser.assetsToHide?.count ?? 0
+        return count == 1 ? "Hide This Item?" : "Hide \(count.formatted()) Items?"
     }
 
     @ViewBuilder

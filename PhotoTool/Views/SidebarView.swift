@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct SidebarView: View {
     @Environment(LibraryStore.self) private var store
@@ -84,12 +85,10 @@ private struct SidebarRow: View {
         if node.kind == .album, node.canAddContent {
             label
                 .contentShape(Rectangle())
-                .dropDestination(for: String.self) { items, _ in
-                    let ids = AssetDragPayload.decode(items)
-                    guard !ids.isEmpty else { return false }
-                    browser.addDraggedAssets(ids: ids, toAlbum: node.id)
-                    return true
-                } isTargeted: { isDropTargeted = $0 }
+                .onDrop(
+                    of: [.utf8PlainText],
+                    delegate: AlbumDropDelegate(browser: browser, albumID: node.id, isTargeted: $isDropTargeted)
+                )
                 .listRowBackground(isDropTargeted ? Color.accentColor.opacity(0.25) : nil)
         } else {
             label
@@ -145,5 +144,35 @@ private struct SidebarRow: View {
             .disabled((index ?? 0) == 0)
         Button("Move Down") { browser.moveSibling(node, by: 1) }
             .disabled(index.map { $0 >= siblings.count - 1 } ?? true)
+    }
+}
+
+/// Accepts photos dragged from the grid, and nothing else.
+private struct AlbumDropDelegate: DropDelegate {
+    let browser: BrowserModel
+    let albumID: String
+    @Binding var isTargeted: Bool
+
+    func validateDrop(info: DropInfo) -> Bool {
+        browser.draggedAssetIDs != nil
+    }
+
+    func dropEntered(info: DropInfo) {
+        isTargeted = validateDrop(info: info)
+    }
+
+    func dropExited(info: DropInfo) {
+        isTargeted = false
+    }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .copy)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        isTargeted = false
+        guard let ids = browser.draggedAssetIDs else { return false }
+        browser.addDraggedAssets(ids: ids, toAlbum: albumID)
+        return true
     }
 }

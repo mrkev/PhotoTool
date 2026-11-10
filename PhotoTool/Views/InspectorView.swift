@@ -59,7 +59,6 @@ private struct AssetDetails: View {
                     LabeledContent("Modified", value: date.formatted(date: .abbreviated, time: .standard))
                 }
                 LabeledContent("Favorite", value: asset.isFavorite ? "Yes" : "No")
-                LabeledContent("Hidden", value: asset.isHidden ? "Yes" : "No")
                 LabeledContent("Has Edits", value: asset.hasAdjustments ? "Yes" : "No")
             }
 

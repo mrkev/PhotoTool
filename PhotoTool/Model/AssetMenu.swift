@@ -32,7 +32,6 @@ extension BrowserModel {
         // Titles are based on the first item, which keeps menus fast after
         // Select All. The action itself checks the whole selection.
         let isFavorite = first?.isFavorite ?? false
-        let isHidden = first?.isHidden ?? false
 
         var addToAlbum: [AssetMenuAction] = [
             AssetMenuAction(id: "newAlbumFromSelection", title: "New Album…", isEnabled: hasTargets) { [self] in
@@ -53,10 +52,10 @@ extension BrowserModel {
             ) { [self] in toggleFavorite() }),
             .action(AssetMenuAction(
                 id: "hide",
-                title: isHidden ? "Unhide" : "Hide",
+                title: "Hide…",
                 shortcut: KeyboardShortcut("l", modifiers: .command),
                 isEnabled: hasTargets
-            ) { [self] in toggleHidden() }),
+            ) { [self] in confirmHideTargets() }),
             .separator(id: "sep-1"),
             .submenu(id: "addToAlbum", title: "Add to Album", items: addToAlbum),
         ]
