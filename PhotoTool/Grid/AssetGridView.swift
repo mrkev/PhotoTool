@@ -39,14 +39,19 @@ final class AssetCollectionView: NSCollectionView {
     var onOpen: ((Int) -> Void)?
     var onMove: ((_ delta: Int, _ extend: Bool) -> Void)?
     var onExtendSelection: ((Int) -> Void)?
+    var onSelectOnly: ((Int) -> Void)?
     var onSelectionChanged: (() -> Void)?
     var onToggleFavorite: (() -> Void)?
     var onRemoveFromAlbum: (() -> Void)?
     var menuProvider: (() -> NSMenu?)?
     var columns: () -> Int = { 1 }
+    /// A plain click on an item that's already part of a multiple selection.
+    /// It narrows the selection on mouse up, unless the click becomes a drag.
+    private var pendingSelectOnly: Int?
 
     override func mouseDown(with event: NSEvent) {
         let point = convert(event.locationInWindow, from: nil)
+        pendingSelectOnly = nil
         // NSCollectionView treats Shift-click like Command-click. Photos and
         // Finder select the range from the last clicked item instead.
         if event.modifierFlags.intersection([.shift, .command]) == .shift,
@@ -55,10 +60,31 @@ final class AssetCollectionView: NSCollectionView {
             onExtendSelection(indexPath.item)
             return
         }
+        let clickedItem = indexPathForItem(at: point)
+        // NSCollectionView keeps the whole selection here so it can be dragged,
+        // but never narrows it afterward like Finder and Photos do.
+        if event.modifierFlags.intersection([.shift, .command]).isEmpty,
+           event.clickCount == 1,
+           let clickedItem,
+           selectionIndexPaths.count > 1,
+           selectionIndexPaths.contains(clickedItem) {
+            pendingSelectOnly = clickedItem.item
+        }
         super.mouseDown(with: event)
-        guard event.clickCount == 2 else { return }
-        if let indexPath = indexPathForItem(at: point) {
-            onOpen?(indexPath.item)
+        guard event.clickCount == 2, let clickedItem else { return }
+        onOpen?(clickedItem.item)
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        pendingSelectOnly = nil
+        super.mouseDragged(with: event)
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        super.mouseUp(with: event)
+        if let index = pendingSelectOnly {
+            pendingSelectOnly = nil
+            onSelectOnly?(index)
         }
     }
 
@@ -178,6 +204,11 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
 
         collectionView.collectionViewLayout = layout
         collectionView.register(AssetGridItem.self, forItemWithIdentifier: AssetGridItem.identifier)
+        collectionView.register(
+            DropGapIndicator.self,
+            forSupplementaryViewOfKind: NSCollectionView.elementKindInterItemGapIndicator,
+            withIdentifier: DropGapIndicator.identifier
+        )
         collectionView.dataSource = self
         collectionView.delegate = self
         collectionView.prefetchDataSource = self
@@ -195,6 +226,7 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         collectionView.onOpen = { [weak browser] in browser?.openViewer(at: $0) }
         collectionView.onMove = { [weak self] delta, extend in self?.moveFocus(by: delta, extend: extend) }
         collectionView.onExtendSelection = { [weak self] in self?.extendSelection(to: $0) }
+        collectionView.onSelectOnly = { [weak self] in self?.selectRange(from: $0, to: $0) }
         collectionView.onSelectionChanged = { [weak self] in self?.syncSelection() }
         collectionView.onToggleFavorite = { [weak browser] in
             if browser?.hasTargets == true { browser?.toggleFavorite() }
@@ -366,6 +398,14 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         browser.fetchResult?.count ?? 0
     }
 
+    func collectionView(
+        _ collectionView: NSCollectionView,
+        viewForSupplementaryElementOfKind kind: NSCollectionView.SupplementaryElementKind,
+        at indexPath: IndexPath
+    ) -> NSView {
+        collectionView.makeSupplementaryView(ofKind: kind, withIdentifier: DropGapIndicator.identifier, for: indexPath)
+    }
+
     func collectionView(_ collectionView: NSCollectionView, itemForRepresentedObjectAt indexPath: IndexPath) -> NSCollectionViewItem {
         let item = collectionView.makeItem(withIdentifier: AssetGridItem.identifier, for: indexPath)
         if let item = item as? AssetGridItem, let result = browser.fetchResult, indexPath.item < result.count {
@@ -475,4 +515,27 @@ final class AssetGridCoordinator: NSObject, NSCollectionViewDataSource, NSCollec
         browser.importFiles(urls)
         return true
     }
+}
+
+/// The insertion marker shown while reordering an album. Custom layouts get
+/// none by default.
+final class DropGapIndicator: NSView, NSCollectionViewElement {
+    static let identifier = NSUserInterfaceItemIdentifier("DropGapIndicator")
+
+    override init(frame: NSRect) {
+        super.init(frame: frame)
+        wantsLayer = true
+        layer?.cornerRadius = 1.5
+    }
+
+    @available(*, unavailable)
+    required init?(coder: NSCoder) {
+        fatalError("init(coder:) is not supported")
+    }
+
+    override func updateLayer() {
+        layer?.backgroundColor = NSColor.controlAccentColor.cgColor
+    }
+
+    override var wantsUpdateLayer: Bool { true }
 }
